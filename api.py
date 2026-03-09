@@ -17,9 +17,7 @@ from database import (
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
 
-OPENROUTER_API_KEY = "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"
-ADMIN_SECRET = os.environ.get('ADMIN_SECRET', 'your-secret-key-change-me')
-
+OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 # Initialize database on startup
 init_db()
 

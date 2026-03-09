@@ -9,7 +9,7 @@ from database import init_db, save_entry, update_entry, extract_calories, get_da
 app = Flask(__name__)
 CORS(app)
 
-OPENROUTER_API_KEY = ""
+os.getenv("OPENROUTER_API_KEY")  # Ensure the environment variable is set
 
 # Initialize database on startup
 init_db()

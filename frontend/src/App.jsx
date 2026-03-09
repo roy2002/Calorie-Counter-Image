@@ -11,7 +11,7 @@ import { CalorieTarget } from './components/CalorieTarget';
 import { TodayEntries } from './components/TodayEntries';
 import { Utensils, Trash2, Menu, X } from 'lucide-react';
 
-const API_URL = 'http://localhost:5001';
+const API_URL = 'https://calorie-counter-image.onrender.com/';
 
 function App() {
   const [selectedFile, setSelectedFile] = useState(null);

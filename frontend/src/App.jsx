@@ -9,11 +9,19 @@ import { EditSection } from './components/EditSection';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { CalorieTarget } from './components/CalorieTarget';
 import { TodayEntries } from './components/TodayEntries';
-import { Utensils, Trash2, Menu, X } from 'lucide-react';
+import { AuthForm } from './components/AuthForm';
+import { Utensils, Trash2, Menu, X, LogOut } from 'lucide-react';
 
-const API_URL = 'https://calorie-counter-image.onrender.com/';
+const API_URL = 'http://localhost:5001';
 
 function App() {
+  // Authentication state
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem('auth_token'));
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem('user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+
   const [selectedFile, setSelectedFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -34,16 +42,55 @@ function App() {
     localStorage.setItem('calorieTarget', targetCalories.toString());
   }, [targetCalories]);
 
-  // Load daily stats and weekly summary on mount
+  // Load daily stats and weekly summary on mount (only if authenticated)
   useEffect(() => {
-    loadDailyStats();
-    loadWeeklySummary();
-    loadTodayEntries();
-  }, []);
+    if (authToken) {
+      loadDailyStats();
+      loadWeeklySummary();
+      loadTodayEntries();
+    }
+  }, [authToken]);
+
+  // Auth handlers
+  const handleLogin = (token, userData) => {
+    setAuthToken(token);
+    setUser(userData);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch(`${API_URL}/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user');
+      setAuthToken(null);
+      setUser(null);
+    }
+  };
+
+  // Helper to get auth headers
+  const getAuthHeaders = () => ({
+    'Authorization': `Bearer ${authToken}`,
+    'Content-Type': 'application/json'
+  });
+
+  // Show login page if not authenticated
+  if (!authToken) {
+    return <AuthForm onLogin={handleLogin} />;
+  }
 
   const loadDailyStats = async () => {
     try {
-      const response = await fetch(`${API_URL}/daily-total`);
+      const response = await fetch(`${API_URL}/daily-total`, {
+        headers: getAuthHeaders()
+      });
       const data = await response.json();
       if (data.success && data.data) {
         setDailyStats({
@@ -58,7 +105,9 @@ function App() {
 
   const loadWeeklySummary = async () => {
     try {
-      const response = await fetch(`${API_URL}/weekly-summary`);
+      const response = await fetch(`${API_URL}/weekly-summary`, {
+        headers: getAuthHeaders()
+      });
       const data = await response.json();
       if (data.success && data.data) {
         setWeeklyData(data.data);
@@ -70,7 +119,9 @@ function App() {
 
   const loadTodayEntries = async () => {
     try {
-      const response = await fetch(`${API_URL}/entries`);
+      const response = await fetch(`${API_URL}/entries`, {
+        headers: getAuthHeaders()
+      });
       const data = await response.json();
       if (data.success && data.data) {
         setTodayEntries(data.data);
@@ -93,6 +144,9 @@ function App() {
     try {
       const response = await fetch(`${API_URL}/analyze`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        },
         body: formData
       });
 
@@ -130,9 +184,7 @@ function App() {
     try {
       const response = await fetch(`${API_URL}/reanalyze`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           corrected_items: correctedItems,
           entry_id: currentEntryId
@@ -179,7 +231,8 @@ function App() {
 
     try {
       const response = await fetch(`${API_URL}/clear-data`, {
-        method: 'POST'
+        method: 'POST',
+        headers: getAuthHeaders()
       });
 
       const data = await response.json();
@@ -217,17 +270,28 @@ function App() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-slate-900">Calorie Tracker</h1>
-                <p className="text-sm text-muted-foreground">AI-Powered Food Analysis</p>
+                <p className="text-sm text-muted-foreground">Welcome, {user?.username}!</p>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="lg:hidden"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-            >
-              {sidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogout}
+                className="hidden sm:flex items-center gap-2"
+              >
+                <LogOut className="h-4 w-4" />
+                Logout
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="lg:hidden"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+              >
+                {sidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -253,6 +317,7 @@ function App() {
             <TodayEntries 
               entries={todayEntries}
               onEntryDeleted={handleEntryDeleted}
+              authToken={authToken}
             />
 
             {/* Upload Section */}

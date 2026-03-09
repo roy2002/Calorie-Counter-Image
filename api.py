@@ -1,24 +1,141 @@
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
+from functools import wraps
+from datetime import datetime
 import requests
 import json
 import base64
 import os
-from database import init_db, save_entry, update_entry, extract_calories, get_daily_total, get_all_daily_totals, get_entries_by_date, get_weekly_summary, clear_all_data
+from database import (
+    init_db, save_entry, update_entry, extract_calories, 
+    get_daily_total, get_all_daily_totals, get_entries_by_date, 
+    get_weekly_summary, clear_all_data, delete_entry,
+    create_user, authenticate_user, create_session, validate_token, delete_session,
+    DATABASE
+)
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, supports_credentials=True)
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")  # Ensure the environment variable is set
+OPENROUTER_API_KEY = "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"
+ADMIN_SECRET = os.environ.get('ADMIN_SECRET', 'your-secret-key-change-me')
 
 # Initialize database on startup
 init_db()
 
+# Authentication middleware
+def require_auth(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({'error': 'No authorization token provided'}), 401
+        
+        if token.startswith('Bearer '):
+            token = token[7:]
+        
+        user_id = validate_token(token)
+        if not user_id:
+            return jsonify({'error': 'Invalid or expired token'}), 401
+        
+        # Add user_id to request context
+        request.user_id = user_id
+        return f(*args, **kwargs)
+    
+    return decorated_function
+
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return jsonify({'message': 'Calorie Tracker API'})
+
+# ============= Authentication Endpoints =============
+
+@app.route('/auth/signup', methods=['POST'])
+def signup():
+    """Register a new user"""
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        email = data.get('email')
+        password = data.get('password')
+        
+        if not username or not email or not password:
+            return jsonify({'error': 'Username, email, and password are required'}), 400
+        
+        if len(password) < 6:
+            return jsonify({'error': 'Password must be at least 6 characters'}), 400
+        
+        user_id = create_user(username, email, password)
+        
+        if user_id is None:
+            return jsonify({'error': 'Username or email already exists'}), 409
+        
+        # Create session token
+        token = create_session(user_id)
+        
+        return jsonify({
+            'success': True,
+            'token': token,
+            'user': {
+                'id': user_id,
+                'username': username,
+                'email': email
+            }
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/auth/login', methods=['POST'])
+def login():
+    """Login user"""
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        
+        if not username or not password:
+            return jsonify({'error': 'Username and password are required'}), 400
+        
+        user = authenticate_user(username, password)
+        
+        if not user:
+            return jsonify({'error': 'Invalid username or password'}), 401
+        
+        # Create session token
+        token = create_session(user['id'])
+        
+        return jsonify({
+            'success': True,
+            'token': token,
+            'user': {
+                'id': user['id'],
+                'username': user['username'],
+                'email': user['email']
+            }
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/auth/logout', methods=['POST'])
+@require_auth
+def logout():
+    """Logout user"""
+    try:
+        token = request.headers.get('Authorization', '')[7:]
+        delete_session(token)
+        return jsonify({'success': True, 'message': 'Logged out successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/auth/me', methods=['GET'])
+@require_auth
+def get_current_user():
+    """Get current user info"""
+    # This endpoint can be used to validate the token
+    return jsonify({'success': True, 'user_id': request.user_id})
 
 @app.route('/analyze', methods=['POST'])
+@require_auth
 def analyze_image():
     try:
         # Get the uploaded image
@@ -76,10 +193,10 @@ def analyze_image():
             
             # Extract calories and save to database
             total_calories = extract_calories(analysis_text)
-            entry_id = save_entry(analysis_text, total_calories)
+            entry_id = save_entry(analysis_text, total_calories, request.user_id)
             
             # Get today's total
-            daily_total = get_daily_total()
+            daily_total = get_daily_total(user_id=request.user_id)
             
             return jsonify({
                 'success': True,
@@ -98,10 +215,11 @@ def analyze_image():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/daily-total', methods=['GET'])
+@require_auth
 def daily_total():
     """Get total calories for today or a specific date"""
     date = request.args.get('date')  # Optional date parameter
-    result = get_daily_total(date)
+    result = get_daily_total(date, user_id=request.user_id)
     
     if result:
         return jsonify({'success': True, 'data': result})
@@ -109,26 +227,30 @@ def daily_total():
         return jsonify({'success': True, 'data': {'total_calories': 0, 'entry_count': 0}})
 
 @app.route('/daily-totals', methods=['GET'])
+@require_auth
 def daily_totals():
     """Get daily totals for the last 30 days"""
     limit = request.args.get('limit', 30, type=int)
-    results = get_all_daily_totals(limit)
+    results = get_all_daily_totals(limit, user_id=request.user_id)
     return jsonify({'success': True, 'data': results})
 
 @app.route('/entries', methods=['GET'])
+@require_auth
 def entries():
     """Get all entries for today or a specific date"""
     date = request.args.get('date')  # Optional date parameter
-    results = get_entries_by_date(date)
+    results = get_entries_by_date(date, user_id=request.user_id)
     return jsonify({'success': True, 'data': results})
 
 @app.route('/weekly-summary', methods=['GET'])
+@require_auth
 def weekly_summary():
     """Get summary of the last 7 days"""
-    results = get_weekly_summary()
+    results = get_weekly_summary(user_id=request.user_id)
     return jsonify({'success': True, 'data': results})
 
 @app.route('/reanalyze', methods=['POST'])
+@require_auth
 def reanalyze():
     """Re-analyze with corrected food items"""
     try:
@@ -173,7 +295,7 @@ def reanalyze():
                 return jsonify({'error': 'Entry not found'}), 404
             
             # Get today's total
-            daily_total = get_daily_total()
+            daily_total = get_daily_total(user_id=request.user_id)
             
             return jsonify({
                 'success': True,
@@ -191,12 +313,58 @@ def reanalyze():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/clear-data', methods=['POST'])
-def clear_data():
-    """Clear all data from the database"""
+@app.route('/delete-entry/<int:entry_id>', methods=['DELETE'])
+@require_auth
+def delete_entry_route(entry_id):
+    """Delete a specific entry"""
     try:
-        clear_all_data()
+        success = delete_entry(entry_id, user_id=request.user_id)
+        if success:
+            return jsonify({'success': True, 'message': 'Entry deleted successfully'})
+        else:
+            return jsonify({'success': False, 'error': 'Entry not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/clear-data', methods=['POST'])
+@require_auth
+def clear_data():
+    """Clear all data from the database for the current user"""
+    try:
+        clear_all_data(user_id=request.user_id)
         return jsonify({'success': True, 'message': 'All data cleared successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/recreate-database', methods=['POST'])
+def recreate_database():
+    """ADMIN ONLY: Recreate database with new schema. WARNING: Deletes all data!"""
+    try:
+        # Check admin secret
+        admin_secret = request.headers.get('X-Admin-Secret')
+        if not admin_secret or admin_secret != ADMIN_SECRET:
+            return jsonify({'error': 'Unauthorized - Invalid admin secret'}), 401
+        
+        import os
+        from database import DATABASE
+        
+        # Backup existing database
+        if os.path.exists(DATABASE):
+            backup_name = f"{DATABASE}.backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            try:
+                os.rename(DATABASE, backup_name)
+                print(f"Backup created: {backup_name}")
+            except Exception as e:
+                print(f"Backup failed: {e}")
+        
+        # Recreate database with new schema
+        init_db()
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Database recreated successfully with authentication schema',
+            'note': 'All users must sign up again'
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

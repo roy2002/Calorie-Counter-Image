@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Trash2, Clock } from 'lucide-react';
 
-export function TodayEntries({ entries, onEntryDeleted }) {
+export function TodayEntries({ entries, onEntryDeleted, authToken }) {
   const [deletingId, setDeletingId] = useState(null);
 
   const handleDelete = async (entryId) => {
@@ -15,7 +15,10 @@ export function TodayEntries({ entries, onEntryDeleted }) {
     setDeletingId(entryId);
     try {
       const response = await fetch(`http://localhost:5001/delete-entry/${entryId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
       });
 
       const data = await response.json();

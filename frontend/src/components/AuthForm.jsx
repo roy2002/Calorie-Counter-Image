@@ -23,7 +23,7 @@ export function AuthForm({ onLogin }) {
       : { username, email, password };
 
     try {
-      const response = await fetch(`http://localhost:5001${endpoint}`, {
+      const response = await fetch(`https://calorie-counter-image.onrender.com/${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

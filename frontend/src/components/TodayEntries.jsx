@@ -14,7 +14,7 @@ export function TodayEntries({ entries, onEntryDeleted, authToken }) {
 
     setDeletingId(entryId);
     try {
-      const response = await fetch(`http://localhost:5001/delete-entry/${entryId}`, {
+      const response = await fetch(`https://calorie-counter-image.onrender.com/delete-entry/${entryId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${authToken}`

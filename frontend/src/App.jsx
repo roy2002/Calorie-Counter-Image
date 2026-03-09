@@ -12,7 +12,7 @@ import { TodayEntries } from './components/TodayEntries';
 import { AuthForm } from './components/AuthForm';
 import { Utensils, Trash2, Menu, X, LogOut } from 'lucide-react';
 
-const API_URL = 'http://localhost:5001';
+const API_URL = 'https://calorie-counter-image.onrender.com';
 
 function App() {
   // Authentication state

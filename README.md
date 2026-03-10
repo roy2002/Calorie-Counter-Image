@@ -28,35 +28,6 @@ python api.py
 http://localhost:5001
 ```
 
-## Access from Your Phone
-
-You can access the application from your phone while your laptop is running:
-
-1. **Find your laptop's IP address:**
-```bash
-python show_network_info.py
-```
-
-2. **On your phone:**
-   - Make sure your phone is on the **same WiFi network** as your laptop
-   - Open your phone's browser (Safari, Chrome, etc.)
-   - Navigate to: `http://YOUR-LAPTOP-IP:5001` (replace with the IP shown)
-   - Example: `http://192.168.1.100:5001`
-
-3. **Important notes:**
-   - Your laptop must be awake and running the Flask application
-   - Both devices must be on the same WiFi network
-   - If you can't connect, check your firewall settings (see below)
-
-### macOS Firewall Settings
-
-If you can't connect from your phone:
-1. Go to **System Settings** > **Network** > **Firewall**
-2. Click **Options**
-3. Find **Python** in the list
-4. Select **Allow incoming connections**
-5. Restart the application
-
 ## Usage
 
 ### Analyze Food Image
